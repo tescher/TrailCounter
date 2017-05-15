@@ -57,7 +57,7 @@
     -----------------------------------------------------------------------*/
     #define FACTORYRESET_ENABLE         1
     #define MINIMUM_FIRMWARE_VERSION    "0.6.6"
-    #define MODE_LED_BEHAVIOUR          "MODE"
+    #define MODE_LED_BEHAVIOUR          "MANUAL,OFF"
 /*=========================================================================*/
 
 // Create the bluefruit object, either software serial...uncomment these lines
@@ -90,6 +90,9 @@ volatile long PIR_count;
 const byte PIR_pin = 0;
 
 void update_count() {
+  ble.sendCommandCheckOK("AT+HWModeLED=MANUAL,ON");
+  delay(3000);
+  ble.sendCommandCheckOK("AT+HWModeLED=MANUAL,OFF");
   PIR_count++;
 }
 
@@ -101,7 +104,7 @@ void update_count() {
 /**************************************************************************/
 void setup(void)
 {
-  while (!Serial);  // required for Flora & Micro
+  /* while (!Serial);  // required for Flora & Micro */
   delay(500);
 
   Serial.begin(115200);

@@ -1,7 +1,7 @@
 Trail Counter
 =============
 
-The trail counter project is an attempt to create low-cost sensors that can count park trail users, and communicate by Bluetooth current trail user counts. This project may consist of three components in the end:
+The trail counter project is an attempt to create low-cost sensors that can count park trail users, and communicate by Bluetooth current trail user counts to a phone or other device. This project may consist of three components in the end:
 
 1. A sensor (this proiject)
 2. An iOS and/or Android application to communicate with the sensors

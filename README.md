@@ -18,9 +18,9 @@ Setup
 
 Parts needed:
 
-Adafruit Feather 32u4 Bluefruit LE (https://www.adafruit.com/product/2829)
-PIR sensor and conditioning circuit (https://www.adafruit.com/product/189)
-3.7V LIon battery( https://www.adafruit.com/product/2750 or similar)
+* Adafruit Feather 32u4 Bluefruit LE (https://www.adafruit.com/product/2829)
+* PIR sensor and conditioning circuit (https://www.adafruit.com/product/189)
+* 3.7V LIon battery( https://www.adafruit.com/product/2750 or similar)
 
 Connect the red PIR wire to the BAT pin on the Feather
 Connect the black PIR wire to the GND pin on the Feather

@@ -14,6 +14,7 @@
 
 #include <Arduino.h>
 #include <SPI.h>
+#include <EEPROM.h>
 #if not defined (_VARIANT_ARDUINO_DUE_X_) && not defined (_VARIANT_ARDUINO_ZERO_)
   #include <SoftwareSerial.h>
 #endif
@@ -55,7 +56,7 @@
                               "DISABLE" or "MODE" or "BLEUART" or
                               "HWUART"  or "SPI"  or "MANUAL"
     -----------------------------------------------------------------------*/
-    #define FACTORYRESET_ENABLE         1
+    #define FACTORYRESET_ENABLE         0
     #define MINIMUM_FIRMWARE_VERSION    "0.6.6"
     #define MODE_LED_BEHAVIOUR          "MANUAL,OFF"
 /*=========================================================================*/
@@ -86,14 +87,45 @@ void error(const __FlashStringHelper*err) {
   while (1);
 }
 
-volatile long PIR_count;
+// Counts triggered from the Passive Infrared device
+volatile unsigned long PIR_count;
+volatile unsigned int count_addr;
 const byte PIR_pin = 0;
 
+// Interrupt handler triggered by PIR. Update the count and flash the LED
 void update_count() {
   ble.sendCommandCheckOK("AT+HWModeLED=MANUAL,ON");
   delay(3000);
   ble.sendCommandCheckOK("AT+HWModeLED=MANUAL,OFF");
   PIR_count++;
+  if (count_addr < EEPROM.length() - 4) {
+    count_addr += 4;
+  } else {
+    count_addr = 4;
+  }    
+  unsigned long count = PIR_count;
+  EEPROM.put(count_addr, count);
+  if (count_addr < EEPROM.length() - 4) {
+    EEPROM.put(count_addr + 4, 0L);
+  } else {
+    EEPROM.put(4, 0L); // Beginning rollover, put 00 flag at the beginning
+  }
+}
+
+// Reset the trail count in the EEPROM. Sets the first 4 bytes to 0xAF to signal that the EEPROM has been initialized
+void reset_count() {
+  // Stop counts for now
+  detachInterrupt(digitalPinToInterrupt(PIR_pin));
+  for (int i = 0; i < 4; i++) {
+    EEPROM.write(i,0xAF);
+  }
+  for (int i = 4; i < EEPROM.length(); i++) {
+    EEPROM.write(i,0);
+  }
+  PIR_count = 0;
+  count_addr = 4; // First count location is past the initialization flag
+  // Start counts again
+  attachInterrupt(digitalPinToInterrupt(PIR_pin), update_count, RISING);
 }
 
 /**************************************************************************/
@@ -142,10 +174,6 @@ void setup(void)
 
   ble.verbose(false);  // debug info is a little annoying after this point!
 
-  /* Wait for connection */
-  while (! ble.isConnected()) {
-      delay(500);
-  }
 
   // LED Activity command is only supported from 0.6.6
   if ( ble.isVersionAtLeast(MINIMUM_FIRMWARE_VERSION) )
@@ -153,13 +181,50 @@ void setup(void)
     // Change Mode LED Activity
     Serial.println(F("******************************"));
     Serial.println(F("Change LED activity to " MODE_LED_BEHAVIOUR));
-    ble.sendCommandCheckOK("AT+HWModeLED=" MODE_LED_BEHAVIOUR);
+    ble.sendCommandCheckOK(F("AT+HWModeLED=" MODE_LED_BEHAVIOUR));
     Serial.println(F("******************************"));
   }
 
   // Set up PIR reader pin
   pinMode(PIR_pin, INPUT);
   attachInterrupt(digitalPinToInterrupt(PIR_pin), update_count, RISING);
+
+  // Initialize the EEPROM if necessary. If first 4 bytes are AFAFAFAF assume it is initialized
+  // If already initialized, scan to find first 4 0x00 bytes. Previous 4 bytes are the current count.
+  unsigned long flag;
+  EEPROM.get(0, flag);
+  if (flag != 0xAFAFAFAF) {
+    reset_count();
+    Serial.println(F("Init flag not found, resetting count."));
+  } else {
+    count_addr = 0;
+    bool found_count = false;
+    unsigned long flag;
+    unsigned long count;
+    do {
+      EEPROM.get(count_addr + 4, flag);
+      if (flag == 0) {  // Found our signal flag, previous 4 bytes should be the count
+        if (count_addr == 0) { // If flag was right at the beginning, look at the end of the EEPROM for the count
+          EEPROM.get(EEPROM.length() - 4, count); 
+          count_addr = EEPROM.length() - 4;
+        } else {
+          EEPROM.get(count_addr, count);
+        }
+        found_count = true;
+        PIR_count = count;
+        Serial.print(F("Found count: "));
+        Serial.println(count);
+        Serial.print(F("at address: "));
+        Serial.println(count_addr);
+      } else {
+        count_addr += 4;
+      }  
+    } while (!found_count && (count_addr + 4 < EEPROM.length()));
+    if (!found_count) { // Didn't find count, something's corrupted. Reset
+      Serial.println(F("Flag found, but no count found. Resetting count."));
+      reset_count();
+    }
+  }
 }
 
 /**************************************************************************/
@@ -169,40 +234,31 @@ void setup(void)
 /**************************************************************************/
 void loop(void)
 {
-  // Check for user input
-  char inputs[BUFSIZE+1];
-
-  if ( getUserInput(inputs, BUFSIZE) )
-  {
-    // Send characters to Bluefruit
-    Serial.print("[Send] ");
-    Serial.println(inputs);
-
-    ble.print("AT+BLEUARTTX=");
-    ble.println(inputs);
-
-    // check response stastus
-    if (! ble.waitForOK() ) {
-      Serial.println(F("Failed to send?"));
-    }
+  
+  /* Wait for connection */
+  while (! ble.isConnected()) {
+      delay(500);
   }
 
   // Check for incoming characters from Bluefruit
-  ble.println("AT+BLEUARTRX");
+  ble.println(F("AT+BLEUARTRX"));
   ble.readline();
   if (strcmp(ble.buffer, "OK") == 0) {
     // no data
     return;
   }
-  // Some data was found, its in the buffer
-  Serial.print(F("[Recv] ")); Serial.println(ble.buffer);
+  // Some data was found, it's in the buffer
+  Serial.print(F("[Recv] ")); 
+  Serial.println(ble.buffer);
+
+  // Send count command
   if (strcmp(ble.buffer, "count") == 0) {
     ble.waitForOK();
     // Send count to Bluefruit
-    Serial.print("[Sending count] ");
+    Serial.print(F("[Sending count] "));
     Serial.println(PIR_count);
 
-    ble.print("AT+BLEUARTTX=");
+    ble.print(F("AT+BLEUARTTX="));
     ble.println(PIR_count);
 
     // check response stastus
@@ -212,30 +268,25 @@ void loop(void)
   } else {
     ble.waitForOK();
   }  
+
+  // Reset count command
+  if (strcmp(ble.buffer, "reset") == 0) {
+    ble.waitForOK();
+    // Reset the count
+    reset_count();
+    Serial.println(F("[Resetting count] "));
+
+    ble.print(F("AT+BLEUARTTX="));
+    ble.println("Count reset");
+
+    // check response stastus
+    if (! ble.waitForOK() ) {
+      Serial.println(F("Failed to send reset?"));
+    }
+  } else {
+    ble.waitForOK();
+  }  
+
 }
 
-/**************************************************************************/
-/*!
-    @brief  Checks for user input (via the Serial Monitor)
-*/
-/**************************************************************************/
-bool getUserInput(char buffer[], uint8_t maxSize)
-{
-  // timeout in 100 milliseconds
-  TimeoutTimer timeout(100);
 
-  memset(buffer, 0, maxSize);
-  while( (!Serial.available()) && !timeout.expired() ) { delay(1); }
-
-  if ( timeout.expired() ) return false;
-
-  delay(2);
-  uint8_t count=0;
-  do
-  {
-    count += Serial.readBytes(buffer+count, maxSize);
-    delay(2);
-  } while( (count < maxSize) && (Serial.available()) );
-
-  return true;
-}

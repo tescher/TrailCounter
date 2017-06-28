@@ -36,4 +36,4 @@ Run It
 Plug the battery into the Feather.
 
 Start the Bluefruit iOS or Android app. Connect to the "Adafruit Bluefruit LE" device listed, choose UART mode.
-Type "count" and press SEND. It should return the current sensor count.
+Type "count" and press SEND. It should return the current sensor count. Type "reset" and the count will be reset to zero.

@@ -89,8 +89,15 @@ void error(const __FlashStringHelper*err) {
 
 // Counts triggered from the Passive Infrared device
 volatile unsigned long PIR_count;
+// Where in the EEPROM the current count is stored
 volatile unsigned int count_addr;
-const byte PIR_pin = 0;
+// Length of the count
+int count_size = sizeof(PIR_count);
+// Where the PIR is connected
+#define PIR_pin 0
+// The battery level pin
+#define VBATPIN A9
+
 
 // Interrupt handler triggered by PIR. Update the count and flash the LED
 void update_count() {
@@ -98,15 +105,15 @@ void update_count() {
   delay(3000);
   ble.sendCommandCheckOK("AT+HWModeLED=MANUAL,OFF");
   PIR_count++;
-  if (count_addr < EEPROM.length() - 4) {
-    count_addr += 4;
+  if (count_addr < EEPROM.length() - count_size) {
+    count_addr += count_size;
   } else {
-    count_addr = 4;
+    count_addr = count_size;
   }    
   unsigned long count = PIR_count;
   EEPROM.put(count_addr, count);
-  if (count_addr < EEPROM.length() - 4) {
-    EEPROM.put(count_addr + 4, 0L);
+  if (count_addr < EEPROM.length() - count_size) {
+    EEPROM.put(count_addr + count_size, 0L);
   } else {
     EEPROM.put(4, 0L); // Beginning rollover, put 00 flag at the beginning
   }
@@ -202,11 +209,11 @@ void setup(void)
     unsigned long flag;
     unsigned long count;
     do {
-      EEPROM.get(count_addr + 4, flag);
+      EEPROM.get(count_addr + count_size, flag);
       if (flag == 0) {  // Found our signal flag, previous 4 bytes should be the count
         if (count_addr == 0) { // If flag was right at the beginning, look at the end of the EEPROM for the count
-          EEPROM.get(EEPROM.length() - 4, count); 
-          count_addr = EEPROM.length() - 4;
+          EEPROM.get(EEPROM.length() - count_size, count); 
+          count_addr = EEPROM.length() - count_size;
         } else {
           EEPROM.get(count_addr, count);
         }
@@ -217,9 +224,9 @@ void setup(void)
         Serial.print(F("at address: "));
         Serial.println(count_addr);
       } else {
-        count_addr += 4;
+        count_addr += count_size;
       }  
-    } while (!found_count && (count_addr + 4 < EEPROM.length()));
+    } while (!found_count && (count_addr + count_size < EEPROM.length()));
     if (!found_count) { // Didn't find count, something's corrupted. Reset
       Serial.println(F("Flag found, but no count found. Resetting count."));
       reset_count();
@@ -282,6 +289,29 @@ void loop(void)
     // check response stastus
     if (! ble.waitForOK() ) {
       Serial.println(F("Failed to send reset?"));
+    }
+  } else {
+    ble.waitForOK();
+  }  
+  
+  // Battery level command
+  if (strcmp(ble.buffer, "bat") == 0) {
+    ble.waitForOK();
+    // Get the battery level
+    float measuredvbat = analogRead(VBATPIN);
+    measuredvbat *= 2;    // we divided by 2, so multiply back
+    measuredvbat *= 3.3;  // Multiply by 3.3V, our reference voltage
+    measuredvbat /= 1024; // convert to voltage
+    
+    Serial.print(F("[Sending battery level] "));
+    Serial.println(measuredvbat);
+
+    ble.print(F("AT+BLEUARTTX="));
+    ble.println(measuredvbat);
+
+    // check response stastus
+    if (! ble.waitForOK() ) {
+      Serial.println(F("Failed to send battery level?"));
     }
   } else {
     ble.waitForOK();

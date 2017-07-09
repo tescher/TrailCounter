@@ -38,6 +38,7 @@ To run the device in low power mode, you need to solder a wire between a couple 
 
 WARNING: If you uncomment this line of code without the wire connection, the chip will only come out of sleep mode every 8 seconds, making a bluetooth connection somewhat unresponsive.
 
+WARNING 2: If you run in this mode, also be aware that the USB is shut off while the board is sleeping. So, to get the connection to the IDE to work consistently you need to start a Bluetooth connection to the board to keep it awake while you have the USB connected. 
 
 Run It
 ======

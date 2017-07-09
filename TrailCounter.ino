@@ -49,7 +49,8 @@
     MODE_LED_BEHAVIOUR        LED activity, valid options are
                               "DISABLE" or "MODE" or "BLEUART" or
                               "HWUART"  or "SPI"  or "MANUAL"
-    BT_CONNECTED_INTERRUPT   Bluetooth connected signal (BLE pin 39) is tied to 
+    BT_CONNECTED_INTERRUPT    If defined, implies that the Bluetooth connected 
+                              signal (BLE pin 39) is tied to 
                               32u4 pin 1 (INT3) to generate interrupts on BT connection                          
     -----------------------------------------------------------------------*/
     #define FACTORYRESET_ENABLE         0
@@ -94,6 +95,8 @@ int count_size = sizeof(PIR_count);
 #define PIR_pin 0
 // The battery level pin
 #define VBATPIN A9
+// The built-in red LED pin
+#define RED_LED_pin 13
 // Where the BT Connected signal would be connected
 #define BT_CONNECTED_pin 1
 // Number of times we went to sleep since restart
@@ -102,9 +105,13 @@ volatile unsigned long sleep_count = 0;
 
 // Interrupt handler triggered by PIR. Update the count and flash the LED
 void update_count() {
-  ble.sendCommandCheckOK("AT+HWModeLED=MANUAL,ON");
-  delay(3000);
-  ble.sendCommandCheckOK("AT+HWModeLED=MANUAL,OFF");
+  // Stop all interrupts for now
+  /* detachInterrupt(digitalPinToInterrupt(PIR_pin));
+  #if define BT_CONNECTED_INTERRUPT
+  detachInterrupt(digitalPinToInterrupt(BT_CONNECTED_pin));
+  #endif */
+
+  digitalWrite(RED_LED_pin, HIGH);
   PIR_count++;
   if (count_addr < EEPROM.length() - count_size) {
     count_addr += count_size;
@@ -118,12 +125,24 @@ void update_count() {
   } else {
     EEPROM.put(4, 0L); // Beginning rollover, put 00 flag at the beginning
   }
+  // Start interrupts again
+  /* attachInterrupt(digitalPinToInterrupt(PIR_pin), update_count, RISING);
+  #if define BT_CONNECTED_INTERRUPT
+  attachInterrupt(digitalPinToInterrupt(BT_CONNECTED_pin, wake_up, RISING));
+  #endif */
+
+
 }
 
 // Reset the trail count in the EEPROM. Sets the first 4 bytes to 0xAF to signal that the EEPROM has been initialized
 void reset_count() {
-  // Stop counts for now
+  // Stop all interrupts for now, don't mess up EEPROM write 
   detachInterrupt(digitalPinToInterrupt(PIR_pin));
+  #if define BT_CONNECTED_INTERRUPT
+  detachInterrupt(digitalPinToInterrupt(BT_CONNECTED_pin));
+  #endif
+  
+  
   for (int i = 0; i < 4; i++) {
     EEPROM.write(i,0xAF);
   }
@@ -134,10 +153,16 @@ void reset_count() {
   count_addr = 4; // First count location is past the initialization flag
   // Start counts again
   attachInterrupt(digitalPinToInterrupt(PIR_pin), update_count, RISING);
+  #if define BT_CONNECTED_INTERRUPT
+  attachInterrupt(digitalPinToInterrupt(BT_CONNECTED_pin, wake_up, RISING));
+  #endif
+
 }
 
 // Interrupt handler for the sleep mode
 void wake_up() {
+  // detachInterrupt(digitalPinToInterrupt(BT_CONNECTED_pin));
+  digitalWrite(RED_LED_pin, HIGH);
   sleep_count++;
   /* No need to do anything here, CPU should just start running again */
 }
@@ -202,6 +227,9 @@ void setup(void)
   // Set up PIR reader pin
   pinMode(PIR_pin, INPUT);
   attachInterrupt(digitalPinToInterrupt(PIR_pin), update_count, RISING);
+  // Red LED pin
+  pinMode(RED_LED_pin, OUTPUT); 
+  digitalWrite(RED_LED_pin, HIGH);
 
   // If we are interrupting on BT Connected, set pin mode
   #if defined (BT_CONNECTED_INTERRUPT)
@@ -254,7 +282,9 @@ void setup(void)
 /**************************************************************************/
 void loop(void)
 {
-  
+  digitalWrite(RED_LED_pin, HIGH); // We're awake
+  delay(500);  // Wait a sec for fog to clear.
+
   /* If connected, look for commands */
   while (ble.isConnected()) {
  
@@ -350,8 +380,11 @@ void loop(void)
 
   /* Bluetooth is not connected, go to sleep for 8 sec */
   #if defined (BT_CONNECTED_INTERRUPT)
-  attachInterrupt(digitalPinToInterrupt(BT_CONNECTED_pin), wake_up, RISING);
-  LowPower.idle(SLEEP_8S, ADC_OFF, TIMER4_OFF, TIMER3_OFF, TIMER1_OFF, TIMER0_OFF, SPI_OFF, USART1_OFF, TWI_OFF, USB_OFF);
+  if (!ble.isConnected() && !digitalRead(BT_CONNECTED_pin)) {
+    digitalWrite(RED_LED_pin, LOW);  // We're going to sleep
+    attachInterrupt(digitalPinToInterrupt(BT_CONNECTED_pin), wake_up, RISING);
+    LowPower.idle(SLEEP_8S, ADC_OFF, TIMER4_OFF, TIMER3_OFF, TIMER1_OFF, TIMER0_OFF, SPI_OFF, USART1_OFF, TWI_OFF, USB_OFF);
+  }  
   detachInterrupt(digitalPinToInterrupt(BT_CONNECTED_pin));
   #endif
 

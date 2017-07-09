@@ -30,10 +30,19 @@ Upload this program to the Feather using the Arduino IDE. You may need to instal
 
 Install the [iOS](https://learn.adafruit.com/bluefruit-le-connect-for-ios) or [Android](https://play.google.com/store/apps/details?id=com.adafruit.bluefruit.le.connect&hl=en) Bluefruit App.
 
+Low Power Mode
+==============
+To run the device in low power mode, you need to solder a wire between a couple spots on the board. It is precise work, use a magnifying glass. First find the resistor connected to the blue LED that lights up when Bluetooth is active. Carefully solder a wire from the side of the resistor opposite the LED, and solder the other end of the wire to pin 1/TX on the board (pretty much right next to the resistor). If you successfully do this, uncomment the following line in the code to enable the low power mode. 
+
+`    #define BT_CONNECTED_INTERRUPT`
+
+WARNING: If you uncomment this line of code without the wire connection, the chip will only come out of sleep mode every 8 seconds, making a bluetooth connection somewhat unresponsive.
+
+
 Run It
 ======
 
 Plug the battery into the Feather.
 
-Start the Bluefruit iOS or Android app. Connect to the "Adafruit Bluefruit LE" device listed, choose UART mode.
+Start the Bluefruit iOS or Android app. Connect to the "Adafruit Bluefruit LE" device listed, choose UART mode.v
 Type "count" and press SEND. It should return the current sensor count. Type "reset" and the count will be reset to zero.

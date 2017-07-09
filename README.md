@@ -26,9 +26,18 @@ Connect the red PIR wire to the BAT pin on the Feather.
 Connect the black PIR wire to the GND pin on the Feather.
 Connect the yellow PIR wire to the 0 RX pin on the Feather.
 
-Upload this program to the Feather using the Arduino IDE. You may need to install some Arduino libraries. See this [tutorial](https://learn.adafruit.com/adafruit-feather-32u4-bluefruit-le).
+Upload this program to the Feather using the Arduino IDE. You may need to install some Arduino libraries. See this [tutorial](https://learn.adafruit.com/adafruit-feather-32u4-bluefruit-le). You will also need to load the Low Power library from [RocketScream](https://github.com/rocketscream/Low-Power). Download a ZIP of the repo, and load it in the Arduino IDE using *Sketch > Include Library > Add .ZIP Library...* 
 
 Install the [iOS](https://learn.adafruit.com/bluefruit-le-connect-for-ios) or [Android](https://play.google.com/store/apps/details?id=com.adafruit.bluefruit.le.connect&hl=en) Bluefruit App.
+
+Low Power Mode
+==============
+To run the device in low power mode, you need to solder a wire between a couple spots on the board. It is precise work, use a magnifying glass. First find the resistor connected to the blue LED that lights up when Bluetooth is active. Carefully solder a wire from the side of the resistor opposite the LED, and solder the other end of the wire to pin 1/TX on the board (pretty much right next to the resistor). If you successfully do this, uncomment the following line in the code to enable the low power mode. 
+
+`    #define BT_CONNECTED_INTERRUPT`
+
+WARNING: If you uncomment this line of code without the wire connection, the chip will only come out of sleep mode every 8 seconds, making a bluetooth connection somewhat unresponsive.
+
 
 Run It
 ======
@@ -36,4 +45,8 @@ Run It
 Plug the battery into the Feather.
 
 Start the Bluefruit iOS or Android app. Connect to the "Adafruit Bluefruit LE" device listed, choose UART mode.
-Type "count" and press SEND. It should return the current sensor count. Type "reset" and the count will be reset to zero.
+
+* Type "count" and press SEND. It should return the current sensor count. 
+* Type "reset" and the count will be reset to zero.
+* Type "bat" to get the battery voltage level.
+* Type "slept" to get the number of times the device went to sleep since the last restart.

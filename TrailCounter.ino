@@ -1,15 +1,7 @@
+
 /*********************************************************************
- This is an example for our nRF51822 based Bluefruit LE modules
-
- Pick one up today in the adafruit shop!
-
- Adafruit invests time and resources providing this open source code,
- please support Adafruit and open-source hardware by purchasing
- products from Adafruit!
-
- MIT license, check LICENSE for more information
- All text above, and the splash screen below must be included in
- any redistribution
+ This is the Arduino code for the Code for Anchorage Trail Counter
+ It assumes an Adafruit Bluefruit Feather 32u4 device
 *********************************************************************/
 
 #include <Arduino.h>
@@ -24,6 +16,8 @@
 #include "Adafruit_BluefruitLE_UART.h"
 
 #include "BluefruitConfig.h"
+#include <LowPower.h>
+
 
 /*=========================================================================
     APPLICATION SETTINGS
@@ -55,10 +49,13 @@
     MODE_LED_BEHAVIOUR        LED activity, valid options are
                               "DISABLE" or "MODE" or "BLEUART" or
                               "HWUART"  or "SPI"  or "MANUAL"
+    BT_CONNECTED_INTERRUPT   Bluetooth connected signal (BLE pin 39) is tied to 
+                              32u4 pin 1 (INT3) to generate interrupts on BT connection                          
     -----------------------------------------------------------------------*/
     #define FACTORYRESET_ENABLE         0
     #define MINIMUM_FIRMWARE_VERSION    "0.6.6"
     #define MODE_LED_BEHAVIOUR          "MANUAL,OFF"
+    #define BT_CONNECTED_INTERRUPT
 /*=========================================================================*/
 
 // Create the bluefruit object, either software serial...uncomment these lines
@@ -97,6 +94,10 @@ int count_size = sizeof(PIR_count);
 #define PIR_pin 0
 // The battery level pin
 #define VBATPIN A9
+// Where the BT Connected signal would be connected
+#define BT_CONNECTED_pin 1
+// Number of times we went to sleep since restart
+volatile unsigned long sleep_count = 0;
 
 
 // Interrupt handler triggered by PIR. Update the count and flash the LED
@@ -133,6 +134,12 @@ void reset_count() {
   count_addr = 4; // First count location is past the initialization flag
   // Start counts again
   attachInterrupt(digitalPinToInterrupt(PIR_pin), update_count, RISING);
+}
+
+// Interrupt handler for the sleep mode
+void wake_up() {
+  sleep_count++;
+  /* No need to do anything here, CPU should just start running again */
 }
 
 /**************************************************************************/
@@ -196,6 +203,12 @@ void setup(void)
   pinMode(PIR_pin, INPUT);
   attachInterrupt(digitalPinToInterrupt(PIR_pin), update_count, RISING);
 
+  // If we are interrupting on BT Connected, set pin mode
+  #if defined (BT_CONNECTED_INTERRUPT)
+  pinMode(BT_CONNECTED_pin, INPUT);
+  #endif
+
+
   // Initialize the EEPROM if necessary. If first 4 bytes are AFAFAFAF assume it is initialized
   // If already initialized, scan to find first 4 0x00 bytes. Previous 4 bytes are the current count.
   unsigned long flag;
@@ -242,80 +255,105 @@ void setup(void)
 void loop(void)
 {
   
-  /* Wait for connection */
-  while (! ble.isConnected()) {
-      delay(500);
-  }
-
-  // Check for incoming characters from Bluefruit
-  ble.println(F("AT+BLEUARTRX"));
-  ble.readline();
-  if (strcmp(ble.buffer, "OK") == 0) {
-    // no data
-    return;
-  }
-  // Some data was found, it's in the buffer
-  Serial.print(F("[Recv] ")); 
-  Serial.println(ble.buffer);
-
-  // Send count command
-  if (strcmp(ble.buffer, "count") == 0) {
-    ble.waitForOK();
-    // Send count to Bluefruit
-    Serial.print(F("[Sending count] "));
-    Serial.println(PIR_count);
-
-    ble.print(F("AT+BLEUARTTX="));
-    ble.println(PIR_count);
-
-    // check response stastus
-    if (! ble.waitForOK() ) {
-      Serial.println(F("Failed to send count?"));
+  /* If connected, look for commands */
+  while (ble.isConnected()) {
+ 
+    // Check for incoming characters from Bluefruit
+    ble.println(F("AT+BLEUARTRX"));
+    ble.readline();
+    if (strcmp(ble.buffer, "OK") == 0) {
+      // no data
+      return;
     }
-  } else {
-    ble.waitForOK();
-  }  
+    // Some data was found, it's in the buffer
+    Serial.print(F("[Recv] ")); 
+    Serial.println(ble.buffer);
 
-  // Reset count command
-  if (strcmp(ble.buffer, "reset") == 0) {
-    ble.waitForOK();
-    // Reset the count
-    reset_count();
-    Serial.println(F("[Resetting count] "));
+    // Send count command
+    if (strcmp(ble.buffer, "count") == 0) {
+      ble.waitForOK();
+      // Send count to Bluefruit
+      Serial.print(F("[Sending count] "));
+      Serial.println(PIR_count);
 
-    ble.print(F("AT+BLEUARTTX="));
-    ble.println("Count reset");
+      ble.print(F("AT+BLEUARTTX="));
+      ble.println(PIR_count);
 
-    // check response stastus
-    if (! ble.waitForOK() ) {
-      Serial.println(F("Failed to send reset?"));
-    }
-  } else {
-    ble.waitForOK();
-  }  
+      // check response stastus
+      if (! ble.waitForOK() ) {
+        Serial.println(F("Failed to send count?"));
+      }
+    } else {
+      ble.waitForOK();
+    }  
+
+    // Reset count command
+    if (strcmp(ble.buffer, "reset") == 0) {
+      ble.waitForOK();
+      // Reset the count
+      reset_count();
+      Serial.println(F("[Resetting count] "));
+
+      ble.print(F("AT+BLEUARTTX="));
+      ble.println("Count reset");
+
+      // check response stastus
+      if (! ble.waitForOK() ) {
+        Serial.println(F("Failed to send reset?"));
+      }
+    } else {
+      ble.waitForOK();
+    }  
   
-  // Battery level command
-  if (strcmp(ble.buffer, "bat") == 0) {
-    ble.waitForOK();
-    // Get the battery level
-    float measuredvbat = analogRead(VBATPIN);
-    measuredvbat *= 2;    // we divided by 2, so multiply back
-    measuredvbat *= 3.3;  // Multiply by 3.3V, our reference voltage
-    measuredvbat /= 1024; // convert to voltage
+    // Battery level command
+    if (strcmp(ble.buffer, "bat") == 0) {
+      ble.waitForOK();
+      // Get the battery level
+      float measuredvbat = analogRead(VBATPIN);
+      measuredvbat *= 2;    // we divided by 2, so multiply back
+      measuredvbat *= 3.3;  // Multiply by 3.3V, our reference voltage
+      measuredvbat /= 1024; // convert to voltage
     
-    Serial.print(F("[Sending battery level] "));
-    Serial.println(measuredvbat);
+      Serial.print(F("[Sending battery level] "));
+      Serial.println(measuredvbat);
 
-    ble.print(F("AT+BLEUARTTX="));
-    ble.println(measuredvbat);
+      ble.print(F("AT+BLEUARTTX="));
+      ble.println(measuredvbat);
 
-    // check response stastus
-    if (! ble.waitForOK() ) {
-      Serial.println(F("Failed to send battery level?"));
-    }
-  } else {
-    ble.waitForOK();
-  }  
+      // check response stastus
+      if (! ble.waitForOK() ) {
+        Serial.println(F("Failed to send battery level?"));
+      }
+    } else {
+      ble.waitForOK();
+    }  
+    
+    // Send sleep count command
+    if (strcmp(ble.buffer, "slept") == 0) {
+      ble.waitForOK();
+      // Send count to Bluefruit
+      Serial.print(F("[Sending sleep count] "));
+      Serial.println(sleep_count);
+
+      ble.print(F("AT+BLEUARTTX="));
+      ble.println(sleep_count);
+
+      // check response stastus
+      if (! ble.waitForOK() ) {
+        Serial.println(F("Failed to send sleep count?"));
+      }
+    } else {
+      ble.waitForOK();
+    }  
+
+  }
+
+  /* Bluetooth is not connected, go to sleep for 8 sec */
+  #if defined (BT_CONNECTED_INTERRUPT)
+  attachInterrupt(digitalPinToInterrupt(BT_CONNECTED_pin), wake_up, RISING);
+  LowPower.idle(SLEEP_8S, ADC_OFF, TIMER4_OFF, TIMER3_OFF, TIMER1_OFF, TIMER0_OFF, SPI_OFF, USART1_OFF, TWI_OFF, USB_OFF);
+  detachInterrupt(digitalPinToInterrupt(BT_CONNECTED_pin));
+  #endif
 
 }
 

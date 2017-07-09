@@ -26,7 +26,7 @@ Connect the red PIR wire to the BAT pin on the Feather.
 Connect the black PIR wire to the GND pin on the Feather.
 Connect the yellow PIR wire to the 0 RX pin on the Feather.
 
-Upload this program to the Feather using the Arduino IDE. You may need to install some Arduino libraries. See this [tutorial](https://learn.adafruit.com/adafruit-feather-32u4-bluefruit-le).
+Upload this program to the Feather using the Arduino IDE. You may need to install some Arduino libraries. See this [tutorial](https://learn.adafruit.com/adafruit-feather-32u4-bluefruit-le). You will also need to load the Low Power library from [RocketScream] (https://github.com/rocketscream/Low-Power). Download a ZIP of the repo, and load it in the Arduino IDE using Sketch > Include Library > Add .ZIP Library... 
 
 Install the [iOS](https://learn.adafruit.com/bluefruit-le-connect-for-ios) or [Android](https://play.google.com/store/apps/details?id=com.adafruit.bluefruit.le.connect&hl=en) Bluefruit App.
 

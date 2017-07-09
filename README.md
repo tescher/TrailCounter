@@ -46,7 +46,7 @@ Plug the battery into the Feather.
 
 Start the Bluefruit iOS or Android app. Connect to the "Adafruit Bluefruit LE" device listed, choose UART mode.
 
-Type "count" and press SEND. It should return the current sensor count. 
-Type "reset" and the count will be reset to zero.
-Type "bat" to get the battery voltage level.
-Type "slept" to get the number of times the device went to sleep since the last restart.
+* Type "count" and press SEND. It should return the current sensor count. 
+* Type "reset" and the count will be reset to zero.
+* Type "bat" to get the battery voltage level.
+* Type "slept" to get the number of times the device went to sleep since the last restart.

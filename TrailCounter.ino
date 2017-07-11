@@ -110,6 +110,7 @@ void update_count() {
   #if define BT_CONNECTED_INTERRUPT
   detachInterrupt(digitalPinToInterrupt(BT_CONNECTED_pin));
   #endif */
+  delay(100); // Let fog clear if we just woke up
 
   digitalWrite(RED_LED_pin, HIGH);
   PIR_count++;
@@ -383,7 +384,8 @@ void loop(void)
   if (!ble.isConnected() && !digitalRead(BT_CONNECTED_pin)) {
     digitalWrite(RED_LED_pin, LOW);  // We're going to sleep
     attachInterrupt(digitalPinToInterrupt(BT_CONNECTED_pin), wake_up, RISING);
-    LowPower.idle(SLEEP_8S, ADC_OFF, TIMER4_OFF, TIMER3_OFF, TIMER1_OFF, TIMER0_OFF, SPI_OFF, USART1_OFF, TWI_OFF, USB_OFF);
+    // LowPower.idle(SLEEP_8S, ADC_OFF, TIMER4_OFF, TIMER3_OFF, TIMER1_OFF, TIMER0_OFF, SPI_OFF, USART1_OFF, TWI_OFF, USB_OFF);
+    LowPower.powerDown(SLEEP_FOREVER, ADC_OFF, BOD_OFF);
   }  
   detachInterrupt(digitalPinToInterrupt(BT_CONNECTED_pin));
   #endif
